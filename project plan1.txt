@@ -1,0 +1,118 @@
+# Enterprise Agent SDK - Quick Start
+
+## 📦 What You Received
+
+A complete, production-ready SDK for building enterprise AI agents with:
+- **MCP Control Plane** for governance
+- **Framework Independence** (swap LangChain, LlamaIndex, etc.)
+- **Type-Safe Tool System**
+- **CLI Interface**
+- **Complete Documentation**
+
+## 🚀 Get Started in 5 Minutes
+
+### 1. Extract the Archive
+```bash
+tar -xzf enterprise-agent-sdk.tar.gz
+cd enterprise-agent-sdk
+```
+
+### 2. Run Setup
+```bash
+bash scripts/setup_dev.sh
+```
+
+### 3. Follow the Guide
+```bash
+cat IMPLEMENTATION_GUIDE.md
+```
+
+## 📚 Key Files
+
+1. **PROJECT_SUMMARY.md** - Complete project overview
+2. **enterprise-agent-sdk-architecture.md** - Architecture diagrams
+3. **IMPLEMENTATION_GUIDE.md** - 30-minute tutorial
+4. **README.md** - Project documentation
+
+## 🎯 First Steps
+
+1. Create a simple tool (10 min)
+2. Register it with MCP server (5 min)
+3. Test execution (5 min)
+
+**Total: 20 minutes to your first working tool!**
+
+## 📂 Project Structure
+
+```
+enterprise-agent-sdk/
+├── src/easdk/              # Core SDK
+│   ├── mcp/               # Control plane
+│   ├── core/              # Interfaces
+│   └── cli/               # Commands
+├── examples/               # Working examples
+├── tests/                  # Test suite
+└── docs/                   # Documentation
+```
+
+## 🔑 Core Concepts
+
+**MCP Server**: All tool invocations flow through the Model Context Protocol server which provides governance, validation, and audit logging.
+
+**Tools**: Implement ITool interface with type-safe schemas
+
+**Agents**: Implement IAgent interface, use MCP to discover and invoke tools
+
+**Adapters**: Bridge external frameworks (LangChain, etc.) to EA-SDK
+
+## ✅ What's Complete
+
+- ✅ Core interfaces (Agent, Tool)
+- ✅ MCP server implementation
+- ✅ Tool registration and discovery
+- ✅ Schema validation
+- ✅ CLI interface
+- ✅ Example tools
+- ✅ Complete documentation
+
+## 🔜 Next Phase
+
+Phase 2: Runtime & Orchestration
+- Agent execution engine
+- Context persistence
+- Retry logic
+- Caching
+
+## 📞 Questions?
+
+Check the comprehensive guides included:
+- IMPLEMENTATION_GUIDE.md
+- PROJECT_SUMMARY.md
+- CONTRIBUTING.md
+
+## 🎓 Learn by Example
+
+```bash
+# See the file reader tool
+cat examples/custom_tools/file_reader.py
+
+# Run the MCP server test
+cat IMPLEMENTATION_GUIDE.md  # Step 4
+```
+
+## 🚀 Deploy to GitHub
+
+```bash
+git init
+git add .
+git commit -m "Initial commit: EA-SDK"
+# Create repo on GitHub, then:
+git remote add origin YOUR_REPO_URL
+git push -u origin main
+```
+
+---
+
+**You now have everything needed to build enterprise-grade AI agents!**
+
+Start with IMPLEMENTATION_GUIDE.md for a hands-on tutorial.
