@@ -1,0 +1,12 @@
+# GitHub Pages Jekyll Configuration
+title: Agentic SDK
+description: Enterprise SDK for Agent Development
+theme: jekyll-theme-minimal
+
+# Plugins
+plugins:
+  - jekyll-readme-index
+
+# Use README.md as index
+readme_index:
+  enabled: true
