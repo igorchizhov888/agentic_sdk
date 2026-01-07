@@ -30,3 +30,13 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# Test files (local development)
+test_*.py
+test_*.db
+
+# Databases (generated locally)
+*.db
+
+# Scripts (local utilities)
+setup_ga4_*.sh

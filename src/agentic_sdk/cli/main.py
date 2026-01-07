@@ -233,3 +233,17 @@ def info():
 
 if __name__ == "__main__":
     cli()
+
+
+# Import prompt commands
+from agentic_sdk.cli.prompt_commands import prompts
+
+# Register prompt commands group
+cli.add_command(prompts)
+
+
+# Import registry commands
+from agentic_sdk.cli.registry_commands import registry
+
+# Register registry commands group
+cli.add_command(registry)

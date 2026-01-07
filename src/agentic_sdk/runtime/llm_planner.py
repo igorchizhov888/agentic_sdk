@@ -3,9 +3,10 @@ LLM-Powered Planner using Anthropic Claude
 """
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import anthropic
 from structlog import get_logger
+from agentic_sdk.prompts import PromptManager, PromptStorage
 
 logger = get_logger(__name__)
 
@@ -13,13 +14,26 @@ logger = get_logger(__name__)
 class LLMPlanner:
     """LLM-powered task planner using Claude Haiku 4.5."""
 
-    def __init__(self, api_key: str = None, model: str = "claude-haiku-4-5-20251001"):
+    def __init__(
+        self, 
+        api_key: str = None, 
+        model: str = "claude-haiku-4-5-20251001",
+        prompt_manager: Optional[PromptManager] = None
+    ):
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY not set")
         
         self.model = model
         self.client = anthropic.Anthropic(api_key=self.api_key)
+        
+        # Initialize prompt manager
+        if prompt_manager is None:
+            storage = PromptStorage("prompts.db")
+            self.prompt_manager = PromptManager(storage)
+        else:
+            self.prompt_manager = prompt_manager
+        
         logger.info("llm_planner_initialized", model=model)
 
     async def create_plan(
@@ -54,27 +68,9 @@ class LLMPlanner:
         
         tools_text = "\n".join(tool_descriptions)
         
-        prompt = f"""You are an AI agent planner. Create a step-by-step execution plan.
-
-Available tools:
-{tools_text}
-
-Task: {task}
-
-CRITICAL RULES:
-1. For calculator, ALWAYS use these exact parameter names: "operation", "a", "b"
-2. operation must be one of: add, subtract, multiply, divide
-3. a and b must be numbers (not strings)
-4. Return ONLY a JSON array, no other text
-
-Example valid response:
-[
-  {{"tool": "calculator", "params": {{"operation": "add", "a": 150, "b": 250}}, "description": "Add 150 and 250"}}
-]
-
-If task cannot be done with available tools, return []
-
-Now create the plan for the task above:"""
+        # Get prompt from prompt manager instead of hardcoding
+        prompt_template = self.prompt_manager.get_prompt("agent_planner")
+        prompt = prompt_template.format(tools_text=tools_text, task=task)
 
         try:
             logger.debug("llm_planning_request", task=task)
