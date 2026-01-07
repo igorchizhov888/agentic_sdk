@@ -247,3 +247,10 @@ from agentic_sdk.cli.registry_commands import registry
 
 # Register registry commands group
 cli.add_command(registry)
+
+
+# Import trace commands
+from agentic_sdk.cli.trace_commands import traces
+
+# Register trace commands group
+cli.add_command(traces)
