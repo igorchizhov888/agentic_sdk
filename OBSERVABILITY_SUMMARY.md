@@ -226,6 +226,60 @@ sqlite3 traces.db "SELECT agent_id, AVG(duration_seconds), COUNT(*) FROM traces 
    - Popular tools
    - Success patterns
 
+
+## CLI Commands (Added)
+
+The observability system includes comprehensive CLI commands for trace analysis:
+
+### List Traces
+```bash
+agentic-sdk traces list                      # Recent traces
+agentic-sdk traces list --agent-id <id>      # Filter by agent
+agentic-sdk traces list --success            # Only successful
+agentic-sdk traces list --failed             # Only failed
+agentic-sdk traces list --limit 20           # Limit results
+```
+
+### Show Trace Details
+```bash
+agentic-sdk traces show <trace-id>
+```
+
+Shows complete trace information:
+- Task and duration
+- Success/failure status
+- All spans with timing
+- Collected metrics
+- Metadata
+
+### Statistics
+```bash
+agentic-sdk traces stats                     # Overall statistics
+agentic-sdk traces stats --agent-id <id>     # Agent-specific
+```
+
+Displays:
+- Total executions
+- Success rate
+- Average/min/max duration
+- Most common tasks
+
+### Example Output
+```
+Trace Statistics (last 9 traces):
+  Total: 9
+  Successful: 9 (100.0%)
+  
+Duration:
+  Average: 0.404s
+  Min: 0.100s
+  Max: 1.509s
+  
+Most Common Tasks:
+  2x: Calculate 100 + 50 and multiply by 2
+  2x: Task 1
+```
+
 ## Next Steps (Not Implemented)
 
 1. Real-time Dashboard
