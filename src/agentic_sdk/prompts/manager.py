@@ -1,12 +1,14 @@
 from typing import Optional, List, Dict, Any
 from .storage import PromptStorage
+from .cache import PromptCache
 
 
 class PromptManager:
-    """High-level interface for managing prompts"""
+    """High-level interface for managing prompts with caching"""
     
-    def __init__(self, storage: PromptStorage):
+    def __init__(self, storage: PromptStorage, cache: Optional[PromptCache] = None):
         self.storage = storage
+        self.cache = cache or PromptCache()
     
     def register_prompt(self, name: str, template: str, 
                        variables: Optional[List[str]] = None,
@@ -32,15 +34,35 @@ class PromptManager:
         # Auto-activate if this is version 1
         if version == 1:
             self.storage.set_active(name, version)
+            cache_key = f"{name}:active"
+            self.cache.set(cache_key, template)
         
         return version
     
     def get_prompt(self, name: str, version: Optional[int] = None) -> str:
-        """Get prompt template by name and optional version"""
+        """Get prompt template by name and optional version (with caching)"""
+        # Build cache key
+        if version is None:
+            cache_key = f"{name}:active"
+        else:
+            cache_key = f"{name}:v{version}"
+        
+        # Check cache first
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+        
+        # Cache miss - query database
         prompt_data = self.storage.load_prompt(name, version)
         if prompt_data is None:
             raise ValueError(f"Prompt '{name}' version {version} not found")
-        return prompt_data['template']
+        
+        template = prompt_data['template']
+        
+        # Store in cache
+        self.cache.set(cache_key, template)
+        
+        return template
     
     def activate_version(self, name: str, version: int):
         """Deploy a specific version"""
@@ -50,6 +72,10 @@ class PromptManager:
             raise ValueError(f"Prompt '{name}' version {version} not found")
         
         self.storage.set_active(name, version)
+        
+        # Update cache
+        cache_key = f"{name}:active"
+        self.cache.set(cache_key, prompt_data['template'])
     
     def rollback(self, name: str):
         """Rollback to previous version"""
@@ -62,7 +88,19 @@ class PromptManager:
         
         previous_version = current_version - 1
         self.storage.set_active(name, previous_version)
+        
+        # Invalidate cache
+        cache_key = f"{name}:active"
+        self.cache.invalidate(cache_key)
     
     def list_versions(self, name: str) -> List[Dict[str, Any]]:
         """List all versions of a prompt"""
         return self.storage.get_all_versions(name)
+    
+    def clear_cache(self):
+        """Clear the entire prompt cache"""
+        self.cache.clear()
+    
+    def cache_stats(self) -> Dict[str, int]:
+        """Get cache statistics"""
+        return self.cache.stats()
