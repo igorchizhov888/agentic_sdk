@@ -1,5 +1,5 @@
 """
-Smart Agent with LLM-Powered Planning and Observability
+Smart Agent with LLM-Powered Planning, Observability, and A/B Testing
 
 Uses Claude Haiku 4.5 for intelligent task planning with full tracing.
 """
@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 
 class SmartAgent(IAgent):
     """
-    Intelligent agent with LLM-powered planning and observability.
+    Intelligent agent with LLM-powered planning, observability, and A/B testing.
     
     Uses Claude Haiku 4.5 to:
     - Understand natural language tasks
@@ -36,10 +36,15 @@ class SmartAgent(IAgent):
     - Distributed tracing
     - Span tracking for operations
     - Metrics collection
+    
+    Supports A/B testing:
+    - Automatic prompt version selection
+    - Result recording for analysis
     """
 
     def __init__(self, config: AgentConfig, mcp_server: MCPServer, 
-                 api_key: str = None, tracer: Optional[AgentTracer] = None):
+                 api_key: str = None, tracer: Optional[AgentTracer] = None,
+                 ab_tester = None):
         """
         Initialize smart agent.
         
@@ -48,6 +53,7 @@ class SmartAgent(IAgent):
             mcp_server: MCP server instance
             api_key: Anthropic API key (optional, reads from env)
             tracer: AgentTracer for observability (optional)
+            ab_tester: ABTester for A/B testing (optional)
         """
         self._config = config
         self._mcp = mcp_server
@@ -55,6 +61,7 @@ class SmartAgent(IAgent):
         self._iteration_count = 0
         self._planner = LLMPlanner(api_key=api_key)
         self._tracer = tracer or AgentTracer()
+        self._ab_tester = ab_tester
 
     @property
     def config(self) -> AgentConfig:
@@ -70,7 +77,7 @@ class SmartAgent(IAgent):
         context: Optional[AgentContext] = None,
         max_iterations: Optional[int] = None,
     ) -> AgentExecutionResult:
-        """Execute a task using LLM planning with full tracing."""
+        """Execute a task using LLM planning with full tracing and A/B testing."""
         start_time = time.time()
         
         if context is None:
@@ -86,6 +93,7 @@ class SmartAgent(IAgent):
         total_tokens = 0
         success = True
         error_msg = None
+        ab_version = None  # Track A/B test version used
 
         logger.info(
             "smart_agent_execution_started",
@@ -112,18 +120,32 @@ class SmartAgent(IAgent):
                     span.set_attribute("model", "claude-haiku-4-5")
                     span.set_attribute("agent_id", str(self._agent_id))
                     
-                    plan = await self.plan(task, context)
+                    plan, ab_version = await self.plan(task, context)
                     
                     span.set_attribute("plan_steps", len(plan))
+                    if ab_version:
+                        span.set_attribute("ab_version", ab_version)
                     self._tracer.record_metric("plan_steps", len(plan))
                 
                 logger.info(
                     "llm_plan_received",
                     agent_id=str(self._agent_id),
                     steps=len(plan),
+                    ab_version=ab_version,
                 )
 
                 if not plan:
+                    # Record A/B test failure if applicable
+                    if self._ab_tester and ab_version:
+                        self._ab_tester.record_result(
+                            prompt_name="agent_planner",
+                            version=ab_version,
+                            trace_id=trace_id,
+                            success=False,
+                            duration=time.time() - start_time,
+                            cost=0.0
+                        )
+                    
                     return AgentExecutionResult(
                         agent_id=self._agent_id,
                         session_id=context.session_id,
@@ -216,6 +238,18 @@ class SmartAgent(IAgent):
 
         duration = time.time() - start_time
 
+        # Record A/B test result if applicable
+        if self._ab_tester and ab_version:
+            self._ab_tester.record_result(
+                prompt_name="agent_planner",
+                version=ab_version,
+                trace_id=trace_id,
+                success=success,
+                duration=duration,
+                cost=0.0  # TODO: track actual cost
+            )
+            logger.info("ab_test_result_recorded", version=ab_version, success=success)
+
         result = AgentExecutionResult(
             agent_id=self._agent_id,
             session_id=context.session_id,
@@ -235,19 +269,25 @@ class SmartAgent(IAgent):
             success=success,
             duration=duration,
             steps_executed=len(tools_invoked),
+            ab_version=ab_version,
         )
 
         return result
 
-    async def plan(self, task: str, context: AgentContext) -> List[Dict[str, Any]]:
-        """Create execution plan using LLM."""
+    async def plan(self, task: str, context: AgentContext) -> tuple[List[Dict[str, Any]], Optional[int]]:
+        """
+        Create execution plan using LLM.
+        
+        Returns:
+            (plan, ab_version) - ab_version is set if A/B test is active
+        """
         # Get available tools from MCP
         tools = await self._mcp.list_tools()
         
-        # Use LLM planner
-        plan = await self._planner.create_plan(task, tools)
+        # Use LLM planner (returns plan and A/B version if applicable)
+        plan, ab_version = await self._planner.create_plan(task, tools)
         
-        return plan
+        return plan, ab_version
 
     async def reset(self) -> None:
         """Reset agent state."""

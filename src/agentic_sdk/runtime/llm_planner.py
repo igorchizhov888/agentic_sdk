@@ -3,7 +3,7 @@ LLM-Powered Planner using Anthropic Claude
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import anthropic
 from structlog import get_logger
 from agentic_sdk.prompts import PromptManager, PromptStorage
@@ -40,8 +40,13 @@ class LLMPlanner:
         self,
         task: str,
         available_tools: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """Create execution plan using Claude."""
+    ) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+        """
+        Create execution plan using Claude.
+        
+        Returns:
+            (plan, prompt_version) - prompt_version is set if A/B test is active
+        """
         
         # Build detailed tool descriptions with example params
         tool_descriptions = []
@@ -68,12 +73,12 @@ class LLMPlanner:
         
         tools_text = "\n".join(tool_descriptions)
         
-        # Get prompt from prompt manager instead of hardcoding
-        prompt_template = self.prompt_manager.get_prompt("agent_planner")
+        # Get prompt from prompt manager (may include A/B test version)
+        prompt_template, ab_version = self.prompt_manager.get_prompt("agent_planner")
         prompt = prompt_template.format(tools_text=tools_text, task=task)
 
         try:
-            logger.debug("llm_planning_request", task=task)
+            logger.debug("llm_planning_request", task=task, ab_version=ab_version)
             
             message = self.client.messages.create(
                 model=self.model,
@@ -93,17 +98,17 @@ class LLMPlanner:
             
             plan = json.loads(response_text)
             
-            logger.info("llm_plan_created", steps=len(plan), task=task)
+            logger.info("llm_plan_created", steps=len(plan), task=task, ab_version=ab_version)
             logger.debug("llm_plan_details", plan=plan)
             
-            return plan
+            return plan, ab_version
             
         except json.JSONDecodeError as e:
             logger.error("llm_plan_parse_error", error=str(e), response=response_text)
-            return []
+            return [], ab_version
         except Exception as e:
             logger.error("llm_planning_failed", error=str(e))
-            return []
+            return [], ab_version
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Estimate cost of API call."""

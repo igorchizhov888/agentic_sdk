@@ -4,11 +4,13 @@ from .cache import PromptCache
 
 
 class PromptManager:
-    """High-level interface for managing prompts with caching"""
+    """High-level interface for managing prompts with caching and A/B testing"""
     
-    def __init__(self, storage: PromptStorage, cache: Optional[PromptCache] = None):
+    def __init__(self, storage: PromptStorage, cache: Optional[PromptCache] = None,
+                 ab_tester = None):
         self.storage = storage
         self.cache = cache or PromptCache()
+        self.ab_tester = ab_tester  # Optional ABTester instance
     
     def register_prompt(self, name: str, template: str, 
                        variables: Optional[List[str]] = None,
@@ -39,8 +41,20 @@ class PromptManager:
         
         return version
     
-    def get_prompt(self, name: str, version: Optional[int] = None) -> str:
-        """Get prompt template by name and optional version (with caching)"""
+    def get_prompt(self, name: str, version: Optional[int] = None) -> tuple[str, Optional[int]]:
+        """
+        Get prompt template by name and optional version (with caching and A/B testing).
+        
+        Returns:
+            (template, version_used) - version_used is set if A/B test is active
+        """
+        # Check if A/B test is active
+        ab_version = None
+        if self.ab_tester and version is None:
+            ab_version = self.ab_tester.get_version_for_request(name)
+            if ab_version:
+                version = ab_version
+        
         # Build cache key
         if version is None:
             cache_key = f"{name}:active"
@@ -50,7 +64,7 @@ class PromptManager:
         # Check cache first
         cached = self.cache.get(cache_key)
         if cached is not None:
-            return cached
+            return cached, ab_version
         
         # Cache miss - query database
         prompt_data = self.storage.load_prompt(name, version)
@@ -62,7 +76,7 @@ class PromptManager:
         # Store in cache
         self.cache.set(cache_key, template)
         
-        return template
+        return template, ab_version
     
     def activate_version(self, name: str, version: int):
         """Deploy a specific version"""

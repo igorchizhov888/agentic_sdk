@@ -254,3 +254,10 @@ from agentic_sdk.cli.trace_commands import traces
 
 # Register trace commands group
 cli.add_command(traces)
+
+
+# Import ab_test commands
+from agentic_sdk.cli.ab_test_commands import ab_test
+
+# Register ab_test commands group
+cli.add_command(ab_test)
