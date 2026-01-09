@@ -50,8 +50,8 @@
 ## NEXT PRIORITIES
 
 ### 1. Advanced Prompt Management
-- [ ] A/B testing framework
-- [ ] Automated promotion based on eval results
+- [DONE] A/B testing framework
+- [DONE] Automated promotion based on eval results
 - [ ] Prompt performance dashboards
 - [ ] Multi-model support (GPT-4, etc)
 
