@@ -4,6 +4,7 @@ LLM-Powered Planner using Anthropic Claude
 
 import os
 from typing import Any, Dict, List, Optional, Tuple
+import json
 import anthropic
 from structlog import get_logger
 from agentic_sdk.prompts import PromptManager, PromptStorage
@@ -89,7 +90,6 @@ class LLMPlanner:
             response_text = message.content[0].text.strip()
             
             # Clean response
-            import json
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1])
