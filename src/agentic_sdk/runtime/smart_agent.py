@@ -18,7 +18,7 @@ from agentic_sdk.core.interfaces.tool import ToolExecutionContext
 from agentic_sdk.mcp.server import MCPServer
 from agentic_sdk.runtime.llm_planner import LLMPlanner
 from agentic_sdk.observability import AgentTracer
-from agentic_sdk.memory import WorkingMemory, SessionMemory
+from agentic_sdk.memory import HierarchicalMemory
 from structlog import get_logger
 
 logger = get_logger(__name__)
@@ -42,14 +42,16 @@ class SmartAgent(IAgent):
     - Automatic prompt version selection
     - Result recording for analysis
     
-    Memory hierarchy:
-    - Working Memory: Task-scoped, volatile
-    - Session Memory: Session-scoped, persistent
+    Three-level memory hierarchy:
+    - L1 Working Memory: Task-scoped, volatile
+    - L2 Session Memory: Session-scoped, persistent
+    - L3 Long-term Memory: Cross-session, persistent
     """
 
     def __init__(self, config: AgentConfig, mcp_server: MCPServer, 
                  api_key: str = None, tracer: Optional[AgentTracer] = None,
-                 ab_tester = None, enable_memory: bool = True):
+                 ab_tester = None, enable_memory: bool = True,
+                 user_id: str = "default"):
         """
         Initialize smart agent.
         
@@ -59,7 +61,8 @@ class SmartAgent(IAgent):
             api_key: Anthropic API key (optional, reads from env)
             tracer: AgentTracer for observability (optional)
             ab_tester: ABTester for A/B testing (optional)
-            enable_memory: Enable working and session memory (default: True)
+            enable_memory: Enable hierarchical memory (default: True)
+            user_id: User ID for long-term memory (default: "default")
         """
         self._config = config
         self._mcp = mcp_server
@@ -69,10 +72,10 @@ class SmartAgent(IAgent):
         self._tracer = tracer or AgentTracer()
         self._ab_tester = ab_tester
         
-        # Initialize memory
+        # Initialize hierarchical memory
         self._enable_memory = enable_memory
-        self._working_memory = WorkingMemory() if enable_memory else None
-        self._session_memory = None  # Created per session
+        self._memory = None  # Created per session with HierarchicalMemory
+        self._user_id = user_id
 
     @property
     def config(self) -> AgentConfig:
@@ -83,14 +86,9 @@ class SmartAgent(IAgent):
         return self._agent_id
     
     @property
-    def working_memory(self) -> Optional[WorkingMemory]:
-        """Access working memory"""
-        return self._working_memory
-    
-    @property
-    def session_memory(self) -> Optional[SessionMemory]:
-        """Access session memory"""
-        return self._session_memory
+    def memory(self) -> Optional[HierarchicalMemory]:
+        """Access hierarchical memory (all three levels)"""
+        return self._memory
 
     async def execute(
         self,
@@ -108,15 +106,17 @@ class SmartAgent(IAgent):
                 trace_id=f"trace-{uuid4()}",
             )
         
-        # Initialize session memory if enabled
-        if self._enable_memory and self._session_memory is None:
-            self._session_memory = SessionMemory(str(context.session_id))
-        
-        # Clear working memory for new task
-        if self._working_memory:
-            self._working_memory.clear()
-            self._working_memory.store("task", task)
-            self._working_memory.store("session_id", str(context.session_id))
+        # Initialize hierarchical memory for this session
+        if self._enable_memory:
+            self._memory = HierarchicalMemory(
+                user_id=self._user_id,
+                session_id=str(context.session_id)
+            )
+            
+            # Store task context
+            self._memory.store("task", task, level="working")
+            self._memory.store("session_id", str(context.session_id), level="working")
+            self._memory.store("agent_id", str(self._agent_id), level="working")
 
         max_iter = max_iterations or self._config.max_iterations
         tools_invoked = []
@@ -143,7 +143,8 @@ class SmartAgent(IAgent):
                 "agent_name": self._config.name,
                 "model": self._config.model,
                 "max_iterations": max_iter,
-                "memory_enabled": self._enable_memory
+                "memory_enabled": self._enable_memory,
+                "user_id": self._user_id
             }
         ) as trace_id:
             
@@ -161,8 +162,8 @@ class SmartAgent(IAgent):
                     self._tracer.record_metric("plan_steps", len(plan))
                     
                     # Store plan in working memory
-                    if self._working_memory:
-                        self._working_memory.store("plan", plan)
+                    if self._memory:
+                        self._memory.store("plan", plan, level="working")
                 
                 logger.info(
                     "llm_plan_received",
@@ -246,8 +247,8 @@ class SmartAgent(IAgent):
                         tools_invoked.append(tool_name)
                         
                         # Store result in working memory
-                        if self._working_memory and result.success:
-                            self._working_memory.store(f"step_{i}_result", result.output)
+                        if self._memory and result.success:
+                            self._memory.store(f"step_{i}_result", result.output, level="working")
                         
                         # Record metrics
                         self._tracer.record_metric(
@@ -266,16 +267,26 @@ class SmartAgent(IAgent):
 
                 final_output = "\n".join(output_parts) if output_parts else "No output"
                 
-                # Store final output in memory
-                if self._working_memory:
-                    self._working_memory.store("final_output", final_output)
-                if self._session_memory:
-                    self._session_memory.store(f"task_{context.trace_id}", {
+                # Store final output in memory hierarchy
+                if self._memory:
+                    # Working memory - for immediate use
+                    self._memory.store("final_output", final_output, level="working")
+                    
+                    # Session memory - for conversation continuity
+                    self._memory.store(f"task_{context.trace_id}", {
                         "task": task,
                         "output": final_output,
                         "success": success,
                         "timestamp": time.time()
-                    })
+                    }, level="session")
+                    
+                    # Long-term memory - store successful patterns
+                    if success:
+                        self._memory.store_fact(
+                            f"Successfully completed: {task}",
+                            confidence=0.9,
+                            source="execution"
+                        )
                 
                 # Record final metrics
                 self._tracer.record_metric("iterations", self._iteration_count)
@@ -322,7 +333,7 @@ class SmartAgent(IAgent):
             duration=duration,
             steps_executed=len(tools_invoked),
             ab_version=ab_version,
-            memory_items=self._working_memory.size() if self._working_memory else 0,
+            memory_summary=self._memory.get_summary() if self._memory else {},
         )
 
         return result
@@ -345,6 +356,6 @@ class SmartAgent(IAgent):
     async def reset(self) -> None:
         """Reset agent state and clear working memory"""
         self._iteration_count = 0
-        if self._working_memory:
-            self._working_memory.clear()
+        if self._memory:
+            self._memory.clear_working()
         logger.info("smart_agent_reset", agent_id=str(self._agent_id))
