@@ -16,7 +16,7 @@ from agentic_sdk.core.interfaces.agent import (
 )
 from agentic_sdk.core.interfaces.tool import ToolExecutionContext
 from agentic_sdk.mcp.server import MCPServer
-from agentic_sdk.runtime.llm_planner import LLMPlanner
+from agentic_sdk.runtime.llm_planner_factory import create_llm_planner
 from agentic_sdk.observability import AgentTracer
 from agentic_sdk.memory import HierarchicalMemory
 from structlog import get_logger
@@ -68,7 +68,7 @@ class SmartAgent(IAgent):
         self._mcp = mcp_server
         self._agent_id = uuid4()
         self._iteration_count = 0
-        self._planner = LLMPlanner(api_key=api_key)
+        self._planner = create_llm_planner(provider=None, api_key=api_key)
         self._tracer = tracer or AgentTracer()
         self._ab_tester = ab_tester
         
